@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from project_rerooter.config import AppConfig, ContentRule, PathMapping, Replacement
-from project_rerooter.sync import apply_path_mappings, build_sync_plan
+from project_rerooter.sync import apply_path_mappings, build_sync_plan, select_replacements
 
 
 def test_apply_path_mappings_multi_rules() -> None:
@@ -89,3 +89,21 @@ def test_build_sync_plan_respects_bin_obj_excludes(tmp_path: Path) -> None:
     assert "ok/a.cs" in rels
     assert "proj/bin/Debug/b.cs" not in rels
     assert "proj/obj/Debug/c.cs" not in rels
+
+
+def test_select_replacements_match_top_level_file_with_double_star() -> None:
+    config = AppConfig(
+        content_rules=[
+            ContentRule(
+                path_glob="**/*",
+                extensions=[".sln"],
+                replacements=[Replacement(from_value="Clarios", to_value="Agents")],
+            )
+        ]
+    )
+    replacements = select_replacements(
+        "Agents.sln",
+        config.content_rules,
+    )
+    assert len(replacements) == 1
+    assert replacements[0].from_value == "Clarios"

@@ -182,11 +182,20 @@ def _is_included(source_rel: str, includes: list[str], excludes: list[str]) -> b
 
 
 def _glob_match(source_rel: str, pattern: str) -> bool:
+    if pattern in {"**", "**/*", "*"}:
+        return True
+
     posix_path = PurePosixPath(source_rel)
     if posix_path.match(pattern):
         return True
     if fnmatchcase(source_rel, pattern):
         return True
+
+    if pattern.startswith("**/"):
+        alt_pattern = pattern[3:]
+        if alt_pattern and (posix_path.match(alt_pattern) or fnmatchcase(source_rel, alt_pattern)):
+            return True
+
     if "/**/" in pattern:
         alt_pattern = pattern.replace("/**/", "/")
         if posix_path.match(alt_pattern):

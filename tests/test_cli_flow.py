@@ -4,6 +4,7 @@ import json
 from project_rerooter.cli import main
 from project_rerooter.config import AppConfig
 from project_rerooter.engine import run_sync
+from project_rerooter.config import ContentRule, PathMapping, Replacement, VerifyOptions
 
 
 def test_cli_dry_run_then_apply(tmp_path: Path) -> None:
@@ -171,3 +172,35 @@ def test_cli_arg_paths_override_mapconfig_paths(tmp_path: Path) -> None:
     assert rc == 0
     assert (cli_dst / "actual.txt").exists()
     assert not (cfg_dst / "actual.txt").exists()
+
+
+def test_run_sync_sln_rewrite_before_text_replace_avoids_false_orphans(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    sln = src / "Agents.sln"
+    csproj = src / "src" / "Clarios.CTOOffice.Agents.Test" / "Clarios.CTOOffice.Agents.Test.csproj"
+    csproj.parent.mkdir(parents=True)
+    csproj.write_text("<Project />", encoding="utf-8")
+    sln.write_text(
+        'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clarios.CTOOffice.Agents.Test", "src\\Clarios.CTOOffice.Agents.Test\\Clarios.CTOOffice.Agents.Test.csproj", "{11111111-1111-1111-1111-111111111111}"\n',
+        encoding="utf-8",
+    )
+
+    config = AppConfig(
+        path_mappings=[PathMapping(from_value="Clarios.CTOOffice.Agents", to_value="Agents")],
+        verify=VerifyOptions(enabled=False),
+        content_rules=[
+            ContentRule(
+                path_glob="**/*",
+                extensions=[".sln"],
+                replacements=[Replacement(from_value="Clarios.CTOOffice.Agents", to_value="Agents")],
+            )
+        ],
+    )
+
+    report = run_sync(src_root=src, dst_root=dst, config=config, dry_run=True)
+    orphan_warnings = [item for item in report.warnings if "orphan project reference" in item]
+    assert orphan_warnings == []

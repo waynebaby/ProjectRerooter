@@ -47,7 +47,7 @@ def run_sync(src_root: Path, dst_root: Path, config: AppConfig, dry_run: bool, s
             continue
 
         text = source_text
-        text, replacement_hits = apply_text_replacements(text, action.replacements)
+        replacement_hits = 0
 
         if action.source_abs.suffix.lower() == ".sln":
             text, warnings = rewrite_sln_project_paths(
@@ -58,6 +58,9 @@ def run_sync(src_root: Path, dst_root: Path, config: AppConfig, dry_run: bool, s
                 orphan_policy=config.sln.orphan_policy,
             )
             report.warnings.extend(warnings)
+            text, replacement_hits = apply_text_replacements(text, action.replacements)
+        else:
+            text, replacement_hits = apply_text_replacements(text, action.replacements)
 
         if action.source_abs.suffix.lower() == ".csproj":
             text = rewrite_csproj_include_paths(
