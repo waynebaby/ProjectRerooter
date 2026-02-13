@@ -70,6 +70,12 @@ project-rerooter --src E:/src/A --dst E:/src/B --mapconfig examples/mapconfig.js
 project-rerooter --mapconfig .workload/mapconfig4REAL.json
 ```
 
+### 7) Ignore extensions from CLI
+
+```bash
+project-rerooter --mapconfig .workload/mapconfig4REAL.json --ignore-ext .md --ignore-ext .png
+```
+
 ## 配置文件
 
 支持 `.json`、`.yaml`、`.yml`（YAML 需要安装 `PyYAML`）。
@@ -94,7 +100,7 @@ project-rerooter --mapconfig .workload/mapconfig4REAL.json
 - `--syncback` 时会从 target 扫描并反向映射回 source。
 - `--syncback` 时若 source 中目标目录已存在，即使文件不存在也会创建该文件。
 - 扫描会读取 source 根目录 `.gitignore`，命中的文件会自动跳过。
-- 二进制文件会跳过（基于扩展名 + 采样判定）。
+- 未被忽略的二进制文件会按原样复制（不做文本替换）。
 - 文本读取支持编码回退：`utf-8`/`utf-8-sig` -> `gb18030`/`cp936` -> `cp1252`。
 - 文本文件读取/写入使用 UTF-8。
 - `.sln` 中 `Project(..., "path", ...)` 会根据实际映射后的项目路径更新。

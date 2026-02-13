@@ -62,11 +62,33 @@ def run_sync(
                 level="debug",
             )
         if action.is_binary:
+            target_exists = action.target_abs.exists()
+            source_bytes = _safe_read_bytes(action.source_abs)
+            if source_bytes is None:
+                report.warnings.append(f"skip unreadable binary file: {action.source_abs.resolve()}")
+                report.unchanged += 1
+                continue
+            target_bytes = _safe_read_bytes(action.target_abs) if target_exists else None
+            changed = (target_bytes != source_bytes)
+
+            if changed:
+                report.created_or_updated += 1
+                if not dry_run:
+                    if syncback and not target_exists and not action.target_abs.parent.exists():
+                        report.warnings.append(
+                            f"skip create (missing source directory): {action.target_abs.resolve()}"
+                        )
+                        continue
+                    action.target_abs.parent.mkdir(parents=True, exist_ok=True)
+                    action.target_abs.write_bytes(source_bytes)
+            else:
+                report.unchanged += 1
+
             report.file_results.append(
                 FileResult(
                     source_rel=str(action.source_abs.resolve()),
                     target_rel=str(action.target_abs.resolve()),
-                    changed=False,
+                    changed=changed,
                     replacement_hits=0,
                     skipped_binary=True,
                 )
@@ -213,6 +235,13 @@ def _safe_read_text(path: Path) -> tuple[str | None, str | None]:
         except (OSError, UnicodeDecodeError):
             continue
     return None, None
+
+
+def _safe_read_bytes(path: Path) -> bytes | None:
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
 
 
 def _runtime_log(message: str, log_level: str, use_color: bool, level: str) -> None:

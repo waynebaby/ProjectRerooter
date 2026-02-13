@@ -303,3 +303,46 @@ def _write_config(tmp_path: Path, config: AppConfig) -> Path:
     path = tmp_path / "mapconfig.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
+
+
+def test_run_sync_copies_binary_file_on_apply(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    payload = b"\x00\x01\x02\xffbinary"
+    (src / "assets").mkdir(parents=True)
+    (src / "assets" / "logo.bin").write_bytes(payload)
+
+    report = run_sync(src_root=src, dst_root=dst, config=AppConfig(), dry_run=False)
+
+    out = dst / "assets" / "logo.bin"
+    assert report.created_or_updated == 1
+    assert out.exists()
+    assert out.read_bytes() == payload
+
+
+def test_run_syncback_copies_binary_file_on_apply(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    (src / "assets").mkdir(parents=True)
+    payload = b"\x00\xaa\xbb\xcc"
+    (dst / "assets").mkdir(parents=True)
+    (dst / "assets" / "blob.dat").write_bytes(payload)
+
+    report = run_sync(
+        src_root=src,
+        dst_root=dst,
+        config=AppConfig(),
+        dry_run=False,
+        syncback=True,
+    )
+
+    out = src / "assets" / "blob.dat"
+    assert report.created_or_updated == 1
+    assert out.exists()
+    assert out.read_bytes() == payload

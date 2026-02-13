@@ -49,7 +49,7 @@ def render_console_report(
     lines.append(f"  • changed files       : {report.created_or_updated}")
     lines.append(f"  • unchanged files     : {report.unchanged}")
     lines.append(f"  • gitignored skipped  : {report.ignored_by_git}")
-    lines.append(f"  • binary skipped      : {report.skipped_binary}")
+    lines.append(f"  • binary files        : {report.skipped_binary}")
     lines.append(f"  • replacement hits    : {report.replacement_hits}")
 
     changed = [item for item in report.file_results if item.changed]
