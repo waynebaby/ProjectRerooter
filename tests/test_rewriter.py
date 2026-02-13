@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from project_rerooter.rewriter import rewrite_sln_project_paths
+from project_rerooter.config import Replacement
+from project_rerooter.rewriter import apply_text_replacements_csproj, rewrite_sln_project_paths
 
 
 def test_rewrite_sln_project_paths(tmp_path: Path) -> None:
@@ -70,3 +71,34 @@ def test_rewrite_sln_solution_folder_entry_no_warning(tmp_path: Path) -> None:
     )
     assert rewritten == content
     assert warnings == []
+
+
+def test_apply_text_replacements_csproj_keeps_packagereference_include() -> None:
+    content = (
+        '<Project><ItemGroup>'
+        '<PackageReference Include="Microsoft.SemanticKernel.Clarios.CTOOffice.Agents.Core" Version="1.0.0" />'
+        '</ItemGroup></Project>'
+    )
+    updated, hits = apply_text_replacements_csproj(
+        content,
+        [Replacement(from_value="Clarios.CTOOffice.Agents", to_value="AgentCommander.Agents")],
+    )
+    assert "Microsoft.SemanticKernel.Clarios.CTOOffice.Agents.Core" in updated
+    assert "Microsoft.SemanticKernel.AgentCommander.Agents.Core" not in updated
+    assert hits == 0
+
+
+def test_apply_text_replacements_csproj_still_replaces_other_content() -> None:
+    content = (
+        '<Project>'
+        '<PropertyGroup><RootNamespace>Clarios.CTOOffice.Agents.Tools</RootNamespace></PropertyGroup>'
+        '<ItemGroup><PackageReference Include="Microsoft.SemanticKernel.Clarios.CTOOffice.Agents.Core" Version="1.0.0" /></ItemGroup>'
+        '</Project>'
+    )
+    updated, hits = apply_text_replacements_csproj(
+        content,
+        [Replacement(from_value="Clarios.CTOOffice.Agents", to_value="AgentCommander.Agents")],
+    )
+    assert "<RootNamespace>AgentCommander.Agents.Tools</RootNamespace>" in updated
+    assert "Microsoft.SemanticKernel.Clarios.CTOOffice.Agents.Core" in updated
+    assert hits == 1

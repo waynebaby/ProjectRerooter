@@ -11,6 +11,10 @@ PROJECT_LINE_RE = re.compile(
     r'^(Project\("\{[^\}]+\}"\)\s*=\s*"[^"]+",\s*")([^"]+)("\s*,\s*"\{[^\}]+\}".*)$'
 )
 INCLUDE_ATTR_RE = re.compile(r'(Include\s*=\s*")([^"]+)(")')
+PACKAGE_REFERENCE_INCLUDE_RE = re.compile(
+    r'(<PackageReference\b[^>]*\bInclude\s*=\s*")([^"]+)(")',
+    re.IGNORECASE,
+)
 
 KNOWN_PROJECT_EXTENSIONS = {
     ".csproj",
@@ -33,6 +37,23 @@ def apply_text_replacements(content: str, replacements: list[Replacement]) -> tu
             updated = updated.replace(replacement.from_value, replacement.to_value)
             total_hits += hits
     return updated, total_hits
+
+
+def apply_text_replacements_csproj(content: str, replacements: list[Replacement]) -> tuple[str, int]:
+    protected_values: list[str] = []
+
+    def _protect(match: re.Match[str]) -> str:
+        protected_values.append(match.group(2))
+        token = f"__PR_INCLUDE_{len(protected_values)-1}__"
+        return f"{match.group(1)}{token}{match.group(3)}"
+
+    staged = PACKAGE_REFERENCE_INCLUDE_RE.sub(_protect, content)
+    staged, hits = apply_text_replacements(staged, replacements)
+
+    for idx, original in enumerate(protected_values):
+        staged = staged.replace(f"__PR_INCLUDE_{idx}__", original)
+
+    return staged, hits
 
 
 def rewrite_sln_project_paths(

@@ -11,6 +11,10 @@ from .config import AppConfig, ContentRule, PathMapping, Replacement
 TEXT_EXTENSIONS = {
     ".py",
     ".cs",
+    ".razor",
+    ".cshtml",
+    ".xaml",
+    ".razor.css",
     ".sln",
     ".csproj",
     ".props",
@@ -60,7 +64,12 @@ def build_sync_plan(src_root: Path, dst_root: Path, config: AppConfig) -> SyncPl
         if gitignore_matcher.is_ignored(source_rel):
             ignored_by_git.append(source_rel)
             continue
-        if not _is_included(source_rel, config.include_globs, config.exclude_globs):
+        if not _is_included(
+            source_rel,
+            config.include_globs,
+            config.exclude_globs,
+            config.ignore_extensions,
+        ):
             continue
 
         target_rel = apply_path_mappings(source_rel, config.path_mappings)
@@ -69,6 +78,11 @@ def build_sync_plan(src_root: Path, dst_root: Path, config: AppConfig) -> SyncPl
 
         is_binary = _is_binary_file(source_abs)
         replacements = select_replacements(source_rel, config.content_rules)
+        if not is_binary:
+            replacements = _merge_replacements(
+                replacements,
+                mapping_replacements_from_path_mappings(config.path_mappings, reverse=False),
+            )
 
         action = FileAction(
             source_abs=source_abs,
@@ -103,7 +117,12 @@ def build_sync_plan_reverse(src_root: Path, dst_root: Path, config: AppConfig) -
         if gitignore_matcher.is_ignored(source_rel):
             ignored_by_git.append(source_rel)
             continue
-        if not _is_included(source_rel, config.include_globs, config.exclude_globs):
+        if not _is_included(
+            source_rel,
+            config.include_globs,
+            config.exclude_globs,
+            config.ignore_extensions,
+        ):
             continue
 
         target_rel = apply_path_mappings(source_rel, config.path_mappings, reverse=True)
@@ -112,6 +131,11 @@ def build_sync_plan_reverse(src_root: Path, dst_root: Path, config: AppConfig) -
 
         is_binary = _is_binary_file(source_abs)
         replacements = select_replacements(source_rel, config.content_rules, reverse=True)
+        if not is_binary:
+            replacements = _merge_replacements(
+                replacements,
+                mapping_replacements_from_path_mappings(config.path_mappings, reverse=True),
+            )
 
         action = FileAction(
             source_abs=source_abs,
@@ -170,8 +194,16 @@ def should_treat_as_text(path: Path) -> bool:
     return False
 
 
-def _is_included(source_rel: str, includes: list[str], excludes: list[str]) -> bool:
+def _is_included(
+    source_rel: str,
+    includes: list[str],
+    excludes: list[str],
+    ignore_extensions: list[str],
+) -> bool:
     if any(_glob_match(source_rel, pattern) for pattern in DEFAULT_HARD_EXCLUDES):
+        return False
+    suffix = Path(source_rel).suffix.lower()
+    if suffix and suffix in set(ignore_extensions):
         return False
     if includes:
         if not any(_glob_match(source_rel, pattern) for pattern in includes):
@@ -223,6 +255,31 @@ def _normalize_pattern(value: str) -> str:
 
 def _to_posix(path: Path) -> str:
     return path.as_posix()
+
+
+def mapping_replacements_from_path_mappings(
+    mappings: list[PathMapping],
+    reverse: bool,
+) -> list[Replacement]:
+    items: list[Replacement] = []
+    for mapping in mappings:
+        if reverse:
+            items.append(Replacement(from_value=mapping.to_value, to_value=mapping.from_value))
+        else:
+            items.append(Replacement(from_value=mapping.from_value, to_value=mapping.to_value))
+    return items
+
+
+def _merge_replacements(primary: list[Replacement], fallback: list[Replacement]) -> list[Replacement]:
+    merged: list[Replacement] = []
+    seen: set[tuple[str, str]] = set()
+    for item in [*primary, *fallback]:
+        key = (item.from_value, item.to_value)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+    return merged
 
 
 @dataclass(slots=True)

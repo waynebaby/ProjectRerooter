@@ -107,3 +107,44 @@ def test_select_replacements_match_top_level_file_with_double_star() -> None:
     )
     assert len(replacements) == 1
     assert replacements[0].from_value == "Clarios"
+
+
+def test_build_sync_plan_applies_path_mapping_replacements_to_razor(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    razor_file = src / "Pages" / "Index.razor"
+    razor_file.parent.mkdir(parents=True)
+    razor_file.write_text("@using Clarios.CTOOffice.Agents.Hosting.Blazor\n", encoding="utf-8")
+
+    config = AppConfig(
+        path_mappings=[PathMapping(from_value="Clarios.CTOOffice.Agents", to_value="Agents")],
+        content_rules=[],
+    )
+    plan = build_sync_plan(src, dst, config)
+    assert len(plan.actions) == 1
+    replacements = plan.actions[0].replacements
+    assert any(item.from_value == "Clarios.CTOOffice.Agents" and item.to_value == "Agents" for item in replacements)
+
+
+def test_build_sync_plan_reverse_applies_path_mapping_replacements(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    target_file = src / "Pages" / "Index.razor"
+    target_file.parent.mkdir(parents=True)
+    target_file.write_text("@using Agents.Hosting.Blazor\n", encoding="utf-8")
+
+    config = AppConfig(
+        path_mappings=[PathMapping(from_value="Clarios.CTOOffice.Agents", to_value="Agents")],
+        content_rules=[],
+    )
+    from project_rerooter.sync import build_sync_plan_reverse
+
+    plan = build_sync_plan_reverse(src_root=src, dst_root=dst, config=config)
+    replacements = plan.actions[0].replacements
+    assert any(item.from_value == "Agents" and item.to_value == "Clarios.CTOOffice.Agents" for item in replacements)

@@ -2,20 +2,46 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+import sys
 
 from .config import AppConfig
 from .report import FileResult, SyncReport, VerifyResult
-from .rewriter import apply_text_replacements, rewrite_csproj_include_paths, rewrite_sln_project_paths
+from .rewriter import (
+    apply_text_replacements,
+    apply_text_replacements_csproj,
+    rewrite_csproj_include_paths,
+    rewrite_sln_project_paths,
+)
 from .sync import SyncPlan, build_sync_plan, build_sync_plan_reverse
 
 
-def run_sync(src_root: Path, dst_root: Path, config: AppConfig, dry_run: bool, syncback: bool = False) -> SyncReport:
+def run_sync(
+    src_root: Path,
+    dst_root: Path,
+    config: AppConfig,
+    dry_run: bool,
+    syncback: bool = False,
+    log_level: str = "debug",
+    use_color: bool = True,
+) -> SyncReport:
+    _runtime_log(
+        "Planning file actions...",
+        log_level=log_level,
+        use_color=use_color,
+        level="normal",
+    )
     if syncback:
         plan = build_sync_plan_reverse(src_root=dst_root, dst_root=src_root, config=config)
         output_root = src_root
     else:
         plan = build_sync_plan(src_root=src_root, dst_root=dst_root, config=config)
         output_root = dst_root
+    _runtime_log(
+        f"Plan ready: actions={len(plan.actions)}, gitignored={len(plan.ignored_by_git)}, binary={len(plan.skipped_binary)}",
+        log_level=log_level,
+        use_color=use_color,
+        level="normal",
+    )
     report = SyncReport(
         scanned=len(plan.actions),
         skipped_binary=len(plan.skipped_binary),
@@ -27,7 +53,14 @@ def run_sync(src_root: Path, dst_root: Path, config: AppConfig, dry_run: bool, s
         for action in plan.actions
     }
 
-    for action in plan.actions:
+    for index, action in enumerate(plan.actions, start=1):
+        if log_level == "debug" and (index % 100 == 0 or index == len(plan.actions)):
+            _runtime_log(
+                f"Processing {index}/{len(plan.actions)}",
+                log_level=log_level,
+                use_color=use_color,
+                level="debug",
+            )
         if action.is_binary:
             report.file_results.append(
                 FileResult(
@@ -59,6 +92,8 @@ def run_sync(src_root: Path, dst_root: Path, config: AppConfig, dry_run: bool, s
             )
             report.warnings.extend(warnings)
             text, replacement_hits = apply_text_replacements(text, action.replacements)
+        elif action.source_abs.suffix.lower() == ".csproj":
+            text, replacement_hits = apply_text_replacements_csproj(text, action.replacements)
         else:
             text, replacement_hits = apply_text_replacements(text, action.replacements)
 
@@ -97,7 +132,13 @@ def run_sync(src_root: Path, dst_root: Path, config: AppConfig, dry_run: bool, s
             )
         )
 
-    if config.verify.enabled:
+    if config.verify.enabled and (not dry_run):
+        _runtime_log(
+            "Running verification...",
+            log_level=log_level,
+            use_color=use_color,
+            level="normal",
+        )
         report.verify_results.extend(run_verification(dst_root=output_root, plan=plan, config=config))
 
     return report
@@ -138,6 +179,8 @@ def _run_cmd(command: list[str], cwd: Path, name: str) -> VerifyResult:
             cwd=str(cwd),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         output = "\n".join(part for part in [proc.stdout, proc.stderr] if part).strip()
@@ -170,3 +213,14 @@ def _safe_read_text(path: Path) -> tuple[str | None, str | None]:
         except (OSError, UnicodeDecodeError):
             continue
     return None, None
+
+
+def _runtime_log(message: str, log_level: str, use_color: bool, level: str) -> None:
+    levels = {"summary": 0, "normal": 1, "debug": 2}
+    if levels.get(log_level, 2) < levels.get(level, 1):
+        return
+    prefix = "[runtime]"
+    line = f"{prefix} {message}"
+    if use_color:
+        line = f"\033[36m{line}\033[0m"
+    print(line, flush=True, file=sys.stdout)

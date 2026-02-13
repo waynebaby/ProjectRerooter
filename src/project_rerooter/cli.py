@@ -24,6 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--replace", action="append", default=[], help="content replacement: from=to")
     parser.add_argument("--include", action="append", default=[], help="include glob (repeatable)")
     parser.add_argument("--exclude", action="append", default=[], help="exclude glob (repeatable)")
+    parser.add_argument(
+        "--ignore-ext",
+        action="append",
+        default=[],
+        help="ignore file extension (repeatable, e.g. --ignore-ext .md)",
+    )
     parser.add_argument("--apply", action="store_true", help="apply changes (default dry-run)")
     parser.add_argument("--syncback", action="store_true", help="reverse sync target back to source")
     parser.add_argument("--no-verify", action="store_true", help="skip verification steps")
@@ -48,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         replace_values=args.replace,
         include_values=args.include,
         exclude_values=args.exclude,
+        ignore_ext_values=args.ignore_ext,
         no_verify=args.no_verify,
     )
 
@@ -65,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
         config=config,
         dry_run=dry_run,
         syncback=args.syncback,
+        log_level=args.log_level,
+        use_color=(not args.no_color),
     )
     print(
         render_console_report(
@@ -88,6 +97,7 @@ def _build_config(
     replace_values: list[str],
     include_values: list[str],
     exclude_values: list[str],
+    ignore_ext_values: list[str],
     no_verify: bool,
 ) -> AppConfig:
     base = load_config(config_path)
@@ -99,6 +109,7 @@ def _build_config(
         inline_replacements=inline_replacements,
         includes=include_values,
         excludes=exclude_values,
+        ignore_extensions=ignore_ext_values,
     )
     if no_verify:
         config.verify.enabled = False

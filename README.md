@@ -10,6 +10,7 @@
 - C# / Python 源码文本替换（普通字符串替换）
 - 英文分层彩色控制台日志（可用 `--no-color` 关闭）
 - 自动读取 source repo 根目录 `.gitignore` 决定扫描文件
+- 支持按扩展名全局忽略（`ignore_extensions` / `--ignore-ext`）
 - 如果未传 `--src/--dst`，会自动使用 `mapconfig` 里的 `source/target`
 
 ## 安装
@@ -85,6 +86,7 @@ project-rerooter --mapconfig .workload/mapconfig4REAL.json
 - `sln.orphan_policy`: `.sln` 孤儿项目策略（`warn` / `strict`）
 - `verify`: 验证开关（`dotnet build`、`python -m compileall`）
 - `include_globs` / `exclude_globs`: 全局扫描过滤
+- `ignore_extensions`: 全局忽略扩展名（如 `.md`）
 
 ## 行为说明
 

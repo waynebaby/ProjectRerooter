@@ -204,3 +204,102 @@ def test_run_sync_sln_rewrite_before_text_replace_avoids_false_orphans(tmp_path:
     report = run_sync(src_root=src, dst_root=dst, config=config, dry_run=True)
     orphan_warnings = [item for item in report.warnings if "orphan project reference" in item]
     assert orphan_warnings == []
+
+
+def test_run_sync_dry_run_skips_verification_even_if_enabled(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+    (src / "a.txt").write_text("hello", encoding="utf-8")
+
+    config = AppConfig(
+        verify=VerifyOptions(enabled=True, dotnet_build=True, python_compileall=True)
+    )
+    report = run_sync(src_root=src, dst_root=dst, config=config, dry_run=True)
+    assert report.verify_results == []
+
+
+def test_run_sync_ignore_extensions_from_config(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    (src / "keep.py").write_text("print('ok')\n", encoding="utf-8")
+    (src / "skip.md").write_text("# note\n", encoding="utf-8")
+
+    config = AppConfig(ignore_extensions=[".md"])
+    rc = main(
+        [
+            "--src",
+            str(src),
+            "--dst",
+            str(dst),
+            "--mapconfig",
+            str(_write_config(tmp_path, config)),
+            "--apply",
+            "--no-verify",
+            "--no-color",
+            "--log-level",
+            "summary",
+        ]
+    )
+    assert rc == 0
+    assert (dst / "keep.py").exists()
+    assert not (dst / "skip.md").exists()
+
+
+def test_cli_ignore_ext_option_overrides(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    (src / "a.md").write_text("# md\n", encoding="utf-8")
+    (src / "b.txt").write_text("txt\n", encoding="utf-8")
+
+    rc = main(
+        [
+            "--src",
+            str(src),
+            "--dst",
+            str(dst),
+            "--ignore-ext",
+            "md",
+            "--apply",
+            "--no-verify",
+            "--no-color",
+            "--log-level",
+            "summary",
+        ]
+    )
+    assert rc == 0
+    assert not (dst / "a.md").exists()
+    assert (dst / "b.txt").exists()
+
+
+def _write_config(tmp_path: Path, config: AppConfig) -> Path:
+    payload = {
+        "source": str(tmp_path / "src"),
+        "target": str(tmp_path / "dst"),
+        "path_mappings": [
+            {"from": mapping.from_value, "to": mapping.to_value}
+            for mapping in config.path_mappings
+        ],
+        "content_rules": [
+            {
+                "path_glob": rule.path_glob,
+                "extensions": rule.extensions,
+                "replacements": [
+                    {"from": replacement.from_value, "to": replacement.to_value}
+                    for replacement in rule.replacements
+                ],
+            }
+            for rule in config.content_rules
+        ],
+        "ignore_extensions": config.ignore_extensions,
+    }
+    path = tmp_path / "mapconfig.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path

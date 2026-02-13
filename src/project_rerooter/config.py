@@ -48,6 +48,7 @@ class AppConfig:
     verify: VerifyOptions = field(default_factory=VerifyOptions)
     include_globs: list[str] = field(default_factory=list)
     exclude_globs: list[str] = field(default_factory=list)
+    ignore_extensions: list[str] = field(default_factory=list)
 
 
 def _load_yaml_if_available(raw_text: str) -> dict[str, Any]:
@@ -126,6 +127,11 @@ def parse_config(data: dict[str, Any]) -> AppConfig:
         ),
         include_globs=list(data.get("include_globs", [])),
         exclude_globs=list(data.get("exclude_globs", [])),
+        ignore_extensions=[
+            _normalize_extension(ext)
+            for ext in data.get("ignore_extensions", [])
+            if str(ext).strip()
+        ],
     )
     validate_config(app_config)
     return app_config
@@ -164,6 +170,7 @@ def merge_cli_overrides(
     inline_replacements: list[Replacement],
     includes: list[str],
     excludes: list[str],
+    ignore_extensions: list[str],
 ) -> AppConfig:
     if inline_mappings:
         base.path_mappings.extend(inline_mappings)
@@ -181,6 +188,8 @@ def merge_cli_overrides(
         base.include_globs.extend(includes)
     if excludes:
         base.exclude_globs.extend(excludes)
+    if ignore_extensions:
+        base.ignore_extensions.extend(_normalize_extension(ext) for ext in ignore_extensions if ext.strip())
 
     validate_config(base)
     return base
@@ -198,3 +207,14 @@ def validate_config(config: AppConfig) -> None:
         for replacement in rule.replacements:
             if replacement.from_value == "":
                 raise ValueError("replacement.from cannot be empty")
+
+    config.ignore_extensions = sorted(set(_normalize_extension(ext) for ext in config.ignore_extensions if ext))
+
+
+def _normalize_extension(value: str) -> str:
+    ext = str(value).strip().lower()
+    if not ext:
+        return ext
+    if not ext.startswith("."):
+        ext = f".{ext}"
+    return ext
