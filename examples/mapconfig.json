@@ -1,0 +1,42 @@
+{
+  "path_mappings": [
+    { "from": "OldCompany", "to": "NewCompany" },
+    { "from": "legacy_pkg", "to": "corp_pkg" }
+  ],
+  "content_rules": [
+    {
+      "path_glob": "src/**/*.cs",
+      "extensions": [".cs"],
+      "replacements": [
+        { "from": "OldCompany", "to": "NewCompany" }
+      ]
+    },
+    {
+      "path_glob": "python/**/*.py",
+      "extensions": [".py"],
+      "replacements": [
+        { "from": "legacy_pkg", "to": "corp_pkg" }
+      ]
+    },
+    {
+      "path_glob": "**/*",
+      "extensions": [".sln", ".csproj"],
+      "replacements": [
+        { "from": "OldCompany", "to": "NewCompany" }
+      ]
+    }
+  ],
+  "sln": {
+    "orphan_policy": "warn"
+  },
+  "verify": {
+    "enabled": true,
+    "dotnet_build": true,
+    "python_compileall": true
+  },
+  "exclude_globs": [
+    "**/bin/**",
+    "**/obj/**",
+    "**/__pycache__/**"
+  ]
+}

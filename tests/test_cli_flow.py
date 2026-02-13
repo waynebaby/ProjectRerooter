@@ -1,0 +1,173 @@
+from pathlib import Path
+import json
+
+from project_rerooter.cli import main
+from project_rerooter.config import AppConfig
+from project_rerooter.engine import run_sync
+
+
+def test_cli_dry_run_then_apply(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    file_path = src / "OldCompany" / "code.py"
+    file_path.parent.mkdir(parents=True)
+    file_path.write_text("import legacy_pkg\n", encoding="utf-8")
+
+    dry_run_rc = main(
+        [
+            "--src",
+            str(src),
+            "--dst",
+            str(dst),
+            "--map",
+            "OldCompany=NewCompany",
+            "--replace",
+            "legacy_pkg=corp_pkg",
+            "--no-verify",
+        ]
+    )
+    assert dry_run_rc == 0
+    assert not (dst / "NewCompany" / "code.py").exists()
+
+    apply_rc = main(
+        [
+            "--src",
+            str(src),
+            "--dst",
+            str(dst),
+            "--map",
+            "OldCompany=NewCompany",
+            "--replace",
+            "legacy_pkg=corp_pkg",
+            "--apply",
+            "--no-verify",
+        ]
+    )
+    assert apply_rc == 0
+    output_file = dst / "NewCompany" / "code.py"
+    assert output_file.exists()
+    assert "corp_pkg" in output_file.read_text(encoding="utf-8")
+
+
+def test_cli_syncback_creates_file_when_source_dir_exists(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    (src / "OldCompany").mkdir(parents=True)
+
+    target_file = dst / "NewCompany" / "code.py"
+    target_file.parent.mkdir(parents=True)
+    target_file.write_text("import corp_pkg\n", encoding="utf-8")
+
+    rc = main(
+        [
+            "--src",
+            str(src),
+            "--dst",
+            str(dst),
+            "--map",
+            "OldCompany=NewCompany",
+            "--replace",
+            "legacy_pkg=corp_pkg",
+            "--syncback",
+            "--apply",
+            "--no-verify",
+        ]
+    )
+    assert rc == 0
+
+    source_file = src / "OldCompany" / "code.py"
+    assert source_file.exists()
+    assert "legacy_pkg" in source_file.read_text(encoding="utf-8")
+
+
+def test_run_sync_reports_gitignored_count(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    (src / ".gitignore").write_text("ignored.log\n", encoding="utf-8")
+    (src / "ignored.log").write_text("ignore", encoding="utf-8")
+    (src / "normal.py").write_text("print('ok')\n", encoding="utf-8")
+
+    report = run_sync(src_root=src, dst_root=dst, config=AppConfig(), dry_run=True)
+    assert report.ignored_by_git == 1
+
+
+def test_run_sync_decodes_cp936_file(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+
+    cp936_file = src / "legacy.txt"
+    cp936_file.write_bytes("中文内容".encode("cp936"))
+
+    report = run_sync(src_root=src, dst_root=dst, config=AppConfig(), dry_run=True)
+    unreadable = [item for item in report.warnings if "skip unreadable text file" in item]
+    assert unreadable == []
+
+
+def test_cli_uses_source_target_from_mapconfig(tmp_path: Path) -> None:
+    src = tmp_path / "source"
+    dst = tmp_path / "target"
+    src.mkdir()
+    dst.mkdir()
+
+    (src / "sample.py").write_text("print('x')\n", encoding="utf-8")
+    config = {
+        "source": str(src),
+        "target": str(dst),
+        "path_mappings": [],
+        "content_rules": [],
+    }
+    config_path = tmp_path / "mapconfig.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    rc = main(["--mapconfig", str(config_path), "--apply", "--no-verify", "--no-color"])
+    assert rc == 0
+    assert (dst / "sample.py").exists()
+
+
+def test_cli_arg_paths_override_mapconfig_paths(tmp_path: Path) -> None:
+    cfg_src = tmp_path / "cfg_source"
+    cfg_dst = tmp_path / "cfg_target"
+    cli_src = tmp_path / "cli_source"
+    cli_dst = tmp_path / "cli_target"
+    cfg_src.mkdir()
+    cfg_dst.mkdir()
+    cli_src.mkdir()
+    cli_dst.mkdir()
+
+    (cli_src / "actual.txt").write_text("ok", encoding="utf-8")
+    config = {
+        "source": str(cfg_src),
+        "target": str(cfg_dst),
+        "path_mappings": [],
+        "content_rules": [],
+    }
+    config_path = tmp_path / "mapconfig.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    rc = main(
+        [
+            "--mapconfig",
+            str(config_path),
+            "--src",
+            str(cli_src),
+            "--dst",
+            str(cli_dst),
+            "--apply",
+            "--no-verify",
+            "--no-color",
+        ]
+    )
+    assert rc == 0
+    assert (cli_dst / "actual.txt").exists()
+    assert not (cfg_dst / "actual.txt").exists()
